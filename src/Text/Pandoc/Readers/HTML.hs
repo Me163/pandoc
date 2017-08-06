@@ -45,7 +45,7 @@ import Text.Pandoc.Definition
 import qualified Text.Pandoc.Builder as B
 import Text.Pandoc.Builder (Blocks, Inlines, trimInlines, HasMeta(..))
 import Text.Pandoc.Shared ( extractSpaces, addMetaField
-                          , escapeURI, safeRead )
+                          , escapeURI, safeRead, crFilter )
 import Text.Pandoc.Options (ReaderOptions(readerExtensions), extensionEnabled,
                                Extension (Ext_epub_html_exts,
                                Ext_raw_html, Ext_native_divs, Ext_native_spans))
@@ -53,6 +53,7 @@ import Text.Pandoc.Logging
 import Text.Pandoc.Parsing hiding ((<|>))
 import Text.Pandoc.Walk
 import qualified Data.Map as M
+import Data.Foldable ( for_ )
 import Data.Maybe ( fromMaybe, isJust)
 import Data.List ( intercalate, isPrefixOf )
 import Data.Char ( isDigit, isLetter, isAlphaNum )
@@ -71,7 +72,7 @@ import Data.Monoid ((<>))
 import Text.Parsec.Error
 import qualified Data.Set as Set
 import Text.Pandoc.Error
-import Text.Pandoc.Class (PandocMonad, report)
+import Text.Pandoc.Class (PandocMonad(..))
 import Control.Monad.Except (throwError)
 
 -- | Convert HTML-formatted string to 'Pandoc' document.
@@ -82,7 +83,7 @@ readHtml :: PandocMonad m
 readHtml opts inp = do
   let tags = stripPrefixes . canonicalizeTags $
              parseTagsOptions parseOptions{ optTagPosition = True }
-             inp
+             (crFilter inp)
       parseDoc = do
         blocks <- (fixPlains False) . mconcat <$> manyTill block eof
         meta <- stateMeta . parserState <$> getState
@@ -134,6 +135,13 @@ type HTMLParser m s = ParserT s HTMLState (ReaderT HTMLLocal m)
 
 type TagParser m = HTMLParser m [Tag Text]
 
+pHtml :: PandocMonad m => TagParser m Blocks
+pHtml = try $ do
+  (TagOpen "html" attr) <- lookAhead $ pAnyTag
+  for_ (lookup "lang" attr) $
+    updateState . B.setMeta "lang" . B.text . T.unpack
+  pInTags "html" block
+
 pBody :: PandocMonad m => TagParser m Blocks
 pBody = pInTags "body" block
 
@@ -162,7 +170,6 @@ pHead = pInTags "head" $ pTitle <|> pMetaTag <|> pBaseTag <|> (mempty <$ pAnyTag
 
 block :: PandocMonad m => TagParser m Blocks
 block = do
-  pos <- getPosition
   res <- choice
             [ eSection
             , eSwitch B.para block
@@ -176,13 +183,15 @@ block = do
             , pList
             , pHrule
             , pTable
+            , pHtml
             , pHead
             , pBody
             , pDiv
             , pPlain
+            , pFigure
             , pRawHtmlBlock
             ]
-  report $ ParsingTrace (take 60 $ show $ B.toList res) pos
+  trace (take 60 $ show $ B.toList res)
   return res
 
 namespaces :: PandocMonad m => [(String, TagParser m Inlines)]
@@ -545,6 +554,25 @@ pPara = do
   contents <- trimInlines <$> pInTags "p" inline
   return $ B.para contents
 
+pFigure :: PandocMonad m => TagParser m Blocks
+pFigure = do
+  TagOpen _ _ <- pSatisfy (matchTagOpen "figure" [])
+  skipMany pBlank
+  let pImg  = pOptInTag "p" pImage <* skipMany pBlank
+      pCapt = option mempty $ pInTags "figcaption" inline <* skipMany pBlank
+      pImgCapt = do
+        img <- pImg
+        cap <- pCapt
+        return (img, cap)
+      pCaptImg = do
+        cap <- pCapt
+        img <- pImg
+        return (img, cap)
+  (imgMany, caption) <- pImgCapt <|> pCaptImg
+  TagClose _ <- pSatisfy (matchTagClose "figure")
+  let (Image attr _ (url, tit)):_ = B.toList imgMany
+  return $ B.para $ B.imageWith attr url ("fig:" ++ tit) caption
+
 pCodeBlock :: PandocMonad m => TagParser m Blocks
 pCodeBlock = try $ do
   TagOpen _ attr' <- pSatisfy (matchTagOpen "pre" [])
@@ -797,6 +825,8 @@ pCloses tagtype = try $ do
        (TagClose "dl") | tagtype == "dd" -> return ()
        (TagClose "table") | tagtype == "td" -> return ()
        (TagClose "table") | tagtype == "tr" -> return ()
+       (TagClose t') | tagtype == "p" && t' `Set.member` blockHtmlTags
+                                            -> return () -- see #3794
        _ -> mzero
 
 pTagText :: PandocMonad m => TagParser m Inlines

@@ -46,6 +46,7 @@ module Text.Pandoc.Readers
   , readMarkdown
   , readCommonMark
   , readMediaWiki
+  , readVimwiki
   , readRST
   , readOrg
   , readLaTeX
@@ -57,8 +58,10 @@ module Text.Pandoc.Readers
   , readNative
   , readJSON
   , readTWiki
+  , readTikiWiki
   , readTxt2Tags
   , readEPUB
+  , readMuse
   -- * Miscellaneous
   , getReader
   , getDefaultExtensions
@@ -81,6 +84,8 @@ import Text.Pandoc.Readers.HTML
 import Text.Pandoc.Readers.LaTeX
 import Text.Pandoc.Readers.Markdown
 import Text.Pandoc.Readers.MediaWiki
+import Text.Pandoc.Readers.Vimwiki
+import Text.Pandoc.Readers.Muse
 import Text.Pandoc.Readers.Native
 import Text.Pandoc.Readers.Odt
 import Text.Pandoc.Readers.OPML
@@ -88,6 +93,7 @@ import Text.Pandoc.Readers.Org
 import Text.Pandoc.Readers.RST
 import Text.Pandoc.Readers.Textile
 import Text.Pandoc.Readers.TWiki
+import Text.Pandoc.Readers.TikiWiki
 import Text.Pandoc.Readers.Txt2Tags
 import Text.Pandoc.Shared (mapLeft)
 import Text.Parsec.Error
@@ -113,6 +119,7 @@ readers = [ ("native"       , TextReader readNative)
            ,("commonmark"   , TextReader readCommonMark)
            ,("rst"          , TextReader readRST)
            ,("mediawiki"    , TextReader readMediaWiki)
+           ,("vimwiki"      , TextReader readVimwiki)
            ,("docbook"      , TextReader readDocBook)
            ,("opml"         , TextReader readOPML)
            ,("org"          , TextReader readOrg)
@@ -121,26 +128,24 @@ readers = [ ("native"       , TextReader readNative)
            ,("latex"        , TextReader readLaTeX)
            ,("haddock"      , TextReader readHaddock)
            ,("twiki"        , TextReader readTWiki)
+           ,("tikiwiki"     , TextReader readTikiWiki)
            ,("docx"         , ByteStringReader readDocx)
            ,("odt"          , ByteStringReader readOdt)
            ,("t2t"          , TextReader readTxt2Tags)
            ,("epub"         , ByteStringReader readEPUB)
+           ,("muse"         , TextReader readMuse)
            ]
 
--- | Retrieve reader based on formatSpec (format+extensions).
-getReader :: PandocMonad m => String -> Either String (Reader m)
+-- | Retrieve reader, extensions based on formatSpec (format+extensions).
+getReader :: PandocMonad m => String -> Either String (Reader m, Extensions)
 getReader s =
   case parseFormatSpec s of
        Left e  -> Left $ intercalate "\n" [m | Message m <- errorMessages e]
        Right (readerName, setExts) ->
            case lookup readerName readers of
                    Nothing  -> Left $ "Unknown reader: " ++ readerName
-                   Just  (TextReader r)  -> Right $ TextReader $ \o ->
-                                  r o{ readerExtensions = setExts $
-                                            getDefaultExtensions readerName }
-                   Just (ByteStringReader r) -> Right $ ByteStringReader $ \o ->
-                                  r o{ readerExtensions = setExts $
-                                            getDefaultExtensions readerName }
+                   Just  r  -> Right (r, setExts $
+                                        getDefaultExtensions readerName)
 
 -- | Read pandoc document from JSON format.
 readJSON :: ReaderOptions -> Text -> Either PandocError Pandoc

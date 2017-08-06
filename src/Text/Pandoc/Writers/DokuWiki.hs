@@ -41,7 +41,7 @@ DokuWiki:  <https://www.dokuwiki.org/dokuwiki>
 module Text.Pandoc.Writers.DokuWiki ( writeDokuWiki ) where
 import Control.Monad (zipWithM)
 import Control.Monad.Reader (ReaderT, ask, local, runReaderT)
-import Control.Monad.State (StateT, evalStateT, gets, modify)
+import Control.Monad.State.Strict (StateT, evalStateT, gets, modify)
 import Data.Default (Default (..))
 import Data.List (intercalate, intersect, isPrefixOf, transpose)
 import Data.Text (Text, pack)
@@ -103,7 +103,7 @@ pandocToDokuWiki opts (Pandoc meta blocks) = do
                 $ metadata
   case writerTemplate opts of
        Nothing  -> return main
-       Just tpl -> return $ renderTemplate' tpl context
+       Just tpl -> renderTemplate' tpl context
 
 -- | Escape special characters for DokuWiki.
 escapeString :: String -> String
@@ -282,11 +282,16 @@ listAttribsToString (startnum, numstyle, _) =
 listItemToDokuWiki :: PandocMonad m
                    => WriterOptions -> [Block] -> DokuWiki m String
 listItemToDokuWiki opts items = do
-  contents <- blockListToDokuWiki opts items
   useTags <- stUseTags <$> ask
   if useTags
-     then return $ "<HTML><li></HTML>" ++ contents ++ "<HTML></li></HTML>"
+     then do
+       contents <- blockListToDokuWiki opts items
+       return $ "<HTML><li></HTML>" ++ contents ++ "<HTML></li></HTML>"
      else do
+       bs <- mapM (blockToDokuWiki opts) items
+       let contents = case items of
+                           [_, CodeBlock _ _] -> concat bs
+                           _ -> vcat bs
        indent <- stIndent <$> ask
        backSlash <- stBackSlashLB <$> ask
        let indent' = if backSlash then (drop 2 indent) else indent
@@ -351,6 +356,7 @@ isSimpleListItem [x, y] | isPlainOrPara x =
        BulletList _     -> isSimpleList y
        OrderedList _ _  -> isSimpleList y
        DefinitionList _ -> isSimpleList y
+       CodeBlock _ _    -> True
        _                -> False
 isSimpleListItem _ = False
 
