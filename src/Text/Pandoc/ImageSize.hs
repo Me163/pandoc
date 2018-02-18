@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables, CPP #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-
-  Copyright (C) 2011-2017 John MacFarlane <jgm@berkeley.edu>
+  Copyright (C) 2011-2018 John MacFarlane <jgm@berkeley.edu>
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
 
 {- |
 Module      : Text.Pandoc.ImageSize
-Copyright   : Copyright (C) 2011-2017 John MacFarlane
+Copyright   : Copyright (C) 2011-2018 John MacFarlane
 License     : GNU GPL, version 2 or above
 
 Maintainer  : John MacFarlane <jgm@berkeley.edu>
@@ -79,13 +79,16 @@ instance Show Direction where
 
 data Dimension = Pixel Integer
                | Centimeter Double
+               | Millimeter Double
                | Inch Double
                | Percent Double
                | Em Double
+               deriving Eq
 
 instance Show Dimension where
   show (Pixel a)      = show   a ++ "px"
   show (Centimeter a) = showFl a ++ "cm"
+  show (Millimeter a) = showFl a ++ "mm"
   show (Inch a)       = showFl a ++ "in"
   show (Percent a)    = show   a ++ "%"
   show (Em a)         = showFl a ++ "em"
@@ -135,7 +138,7 @@ imageSize opts img =
        Just Jpeg -> jpegSize img
        Just Svg  -> mbToEither "could not determine SVG size" $ svgSize opts img
        Just Eps  -> mbToEither "could not determine EPS size" $ epsSize img
-       Just Pdf  -> Left "could not determine PDF size" -- TODO
+       Just Pdf  -> mbToEither "could not determine PDF size" $ pdfSize img
        Nothing   -> Left "could not determine image type"
   where mbToEither msg Nothing  = Left msg
         mbToEither _   (Just x) = Right x
@@ -184,6 +187,7 @@ inInch opts dim =
   case dim of
     (Pixel a)      -> fromIntegral a / fromIntegral (writerDpi opts)
     (Centimeter a) -> a * 0.3937007874
+    (Millimeter a) -> a * 0.03937007874
     (Inch a)       -> a
     (Percent _)    -> 0
     (Em a)         -> a * (11/64)
@@ -193,6 +197,7 @@ inPixel opts dim =
   case dim of
     (Pixel a)      -> a
     (Centimeter a) -> floor $ dpi * a * 0.3937007874 :: Integer
+    (Millimeter a) -> floor $ dpi * a * 0.03937007874 :: Integer
     (Inch a)       -> floor $ dpi * a :: Integer
     (Percent _)    -> 0
     (Em a)         -> floor $ dpi * a * (11/64) :: Integer
@@ -225,6 +230,7 @@ scaleDimension factor dim =
   case dim of
         Pixel x      -> Pixel (round $ factor * fromIntegral x)
         Centimeter x -> Centimeter (factor * x)
+        Millimeter x -> Millimeter (factor * x)
         Inch x       -> Inch (factor * x)
         Percent x    -> Percent (factor * x)
         Em x         -> Em (factor * x)
@@ -243,7 +249,7 @@ lengthToDim :: String -> Maybe Dimension
 lengthToDim s = numUnit s >>= uncurry toDim
   where
     toDim a "cm"   = Just $ Centimeter a
-    toDim a "mm"   = Just $ Centimeter (a / 10)
+    toDim a "mm"   = Just $ Millimeter a
     toDim a "in"   = Just $ Inch a
     toDim a "inch" = Just $ Inch a
     toDim a "%"    = Just $ Percent a
@@ -271,6 +277,29 @@ epsSize img = do
                           , dpiY = 72 }
                      _ -> mzero
 
+pdfSize :: ByteString -> Maybe ImageSize
+pdfSize img =
+  case dropWhile (\l -> not (l == "stream" ||
+                             "/MediaBox" `B.isPrefixOf` l)) (B.lines img) of
+       (x:_)
+         | "/MediaBox" `B.isPrefixOf` x
+         -> case B.words . B.takeWhile (/=']')
+                         . B.drop 1
+                         . B.dropWhile (/='[')
+                         $ x of
+                     [x1, y1, x2, y2] -> do
+                        x1' <- safeRead $ B.unpack x1
+                        x2' <- safeRead $ B.unpack x2
+                        y1' <- safeRead $ B.unpack y1
+                        y2' <- safeRead $ B.unpack y2
+                        return ImageSize{
+                            pxX  = x2' - x1'
+                          , pxY  = y2' - y1'
+                          , dpiX = 72
+                          , dpiY = 72 }
+                     _ -> mzero
+       _    -> mzero
+
 pngSize :: ByteString -> Maybe ImageSize
 pngSize img = do
   let (h, rest) = B.splitAt 8 img
@@ -296,8 +325,8 @@ findpHYs x
         factor = if u == 1 -- dots per meter
                     then \z -> z * 254 `div` 10000
                     else const 72
-    in  ( factor $ (shift x1 24) + (shift x2 16) + (shift x3 8) + x4,
-          factor $ (shift y1 24) + (shift y2 16) + (shift y3 8) + y4 )
+    in  ( factor $ shift x1 24 + shift x2 16 + shift x3 8 + x4,
+          factor $ shift y1 24 + shift y2 16 + shift y3 8 + y4 )
   | otherwise = findpHYs $ B.drop 1 x  -- read another byte
 
 gifSize :: ByteString -> Maybe ImageSize
@@ -602,4 +631,3 @@ tagTypeTable = M.fromList
   , (0xa300, FileSource)
   , (0xa301, SceneType)
   ]
-

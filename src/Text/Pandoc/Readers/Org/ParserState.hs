@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-
-Copyright (C) 2014-2017 Albert Krewinkel <tarleb+pandoc@moltkeplatz.de>
+Copyright (C) 2014-2018 Albert Krewinkel <tarleb+pandoc@moltkeplatz.de>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 {- |
    Module      : Text.Pandoc.Readers.Org.ParserState
-   Copyright   : Copyright (C) 2014-2017 Albert Krewinkel
+   Copyright   : Copyright (C) 2014-2018 Albert Krewinkel
    License     : GNU GPL, version 2 or above
 
    Maintainer  : Albert Krewinkel <tarleb+pandoc@moltkeplatz.de>
@@ -64,14 +64,13 @@ import Text.Pandoc.Builder (Blocks, Inlines)
 import Text.Pandoc.Definition (Meta (..), nullMeta)
 import Text.Pandoc.Logging
 import Text.Pandoc.Options (ReaderOptions (..))
-import Text.Pandoc.Readers.LaTeX.Types (Macro)
 import Text.Pandoc.Parsing (Future, HasHeaderMap (..), HasIdentifierList (..),
                             HasIncludeFiles (..), HasLastStrPosition (..),
-                            HasLogMessages (..), HasQuoteContext (..),
-                            HasMacros (..),
-                            HasReaderOptions (..), ParserContext (..),
-                            QuoteContext (..), SourcePos, askF, asksF, returnF,
-                            runF, trimInlinesF)
+                            HasLogMessages (..), HasMacros (..),
+                            HasQuoteContext (..), HasReaderOptions (..),
+                            ParserContext (..), QuoteContext (..), SourcePos,
+                            askF, asksF, returnF, runF, trimInlinesF)
+import Text.Pandoc.Readers.LaTeX.Types (Macro)
 
 -- | This is used to delay evaluation until all relevant information has been
 -- parsed and made available in the parser state.
@@ -242,6 +241,7 @@ data ExportSettings = ExportSettings
   , exportEmphasizedText   :: Bool -- ^ Parse emphasized text
   , exportHeadlineLevels   :: Int
   -- ^ Maximum depth of headlines, deeper headlines are convert to list
+  , exportPreserveBreaks   :: Bool -- ^ Whether to preserve linebreaks
   , exportSmartQuotes      :: Bool -- ^ Parse quotes smartly
   , exportSpecialStrings   :: Bool -- ^ Parse ellipses and dashes smartly
   , exportSubSuperscripts  :: Bool -- ^ TeX-like syntax for sub- and superscripts
@@ -261,6 +261,7 @@ defaultExportSettings = ExportSettings
   , exportDrawers = Left ["LOGBOOK"]
   , exportEmphasizedText = True
   , exportHeadlineLevels = 3
+  , exportPreserveBreaks = False
   , exportSmartQuotes = False
   , exportSpecialStrings = True
   , exportSubSuperscripts = True

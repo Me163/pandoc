@@ -9,15 +9,13 @@ import Tests.Helpers
 import Text.Pandoc
 import Text.Pandoc.Arbitrary ()
 import Text.Pandoc.Builder
-import Text.Pandoc.Class
+import Text.Pandoc.Shared (underlineSpan)
 
 t2t :: Text -> Pandoc
 -- t2t = handleError . readTxt2Tags (T2TMeta "date" "mtime" "in" "out") def
 t2t = purely $ \s -> do
-  putCommonState
-      def { stInputFiles = Just ["in"]
-          , stOutputFile = Just "out"
-          }
+  setInputFiles ["in"]
+  setOutputFile (Just "out")
   readTxt2Tags def s
 
 infix 4 =:
@@ -32,11 +30,11 @@ simpleTable' :: Int
              -> [Blocks]
              -> [[Blocks]]
              -> Blocks
-simpleTable' n = table "" (take n $ repeat (AlignCenter, 0.0))
+simpleTable' n = table "" (replicate n (AlignCenter, 0.0))
 
 tests :: [TestTree]
 tests =
-  [ testGroup "Inlines" $
+  [ testGroup "Inlines"
       [ "Plain String" =:
           "Hello, World" =?>
           para (spcSep [ "Hello,", "World" ])
@@ -71,12 +69,12 @@ tests =
 
       , "Inline markup is greedy" =:
           "***** ///// _____ ----- ````` \"\"\"\"\" '''''" =?>
-          para (spcSep [strong "*", emph "/", emph "_"
+          para (spcSep [strong "*", emph "/", underlineSpan "_"
                        , strikeout "-", code "`", text "\""
                        , rawInline "html" "'"])
       , "Markup must be greedy" =:
           "**********    //////////    __________    ----------    ``````````   \"\"\"\"\"\"\"\"\"\"   ''''''''''" =?>
-                      para (spcSep [strong "******", emph "//////", emph "______"
+                      para (spcSep [strong "******", emph "//////", underlineSpan "______"
                        , strikeout "------", code "``````", text "\"\"\"\"\"\""
                        , rawInline "html" "''''''"])
       , "Inlines must be glued" =:
@@ -116,7 +114,7 @@ tests =
 
       ]
 
-  , testGroup "Basic Blocks" $
+  , testGroup "Basic Blocks"
       ["Paragraph, lines grouped together" =:
           "A paragraph\n A blank line ends the \n current paragraph\n"
             =?> para "A paragraph\n A blank line ends the\n current paragraph"
@@ -199,7 +197,7 @@ tests =
 
     ]
 
-  , testGroup "Lists" $
+  , testGroup "Lists"
       [ "Simple Bullet Lists" =:
           ("- Item1\n" <>
            "- Item2\n") =?>

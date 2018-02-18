@@ -1,5 +1,5 @@
 {-
-Copyright (C) 2006-2017 John MacFarlane <jgm@berkeley.edu>
+Copyright (C) 2006-2018 John MacFarlane <jgm@berkeley.edu>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 {- |
    Module      : Text.Pandoc
-   Copyright   : Copyright (C) 2006-2017 John MacFarlane
+   Copyright   : Copyright (C) 2006-2018 John MacFarlane
    License     : GNU GPL, version 2 or above
 
    Maintainer  : John MacFarlane <jgm@berkeley.edu>
@@ -68,6 +68,7 @@ module Text.Pandoc.Writers
     , writeOpenDocument
     , writeOrg
     , writePlain
+    , writePowerpoint
     , writeRST
     , writeRTF
     , writeRevealJs
@@ -82,11 +83,13 @@ module Text.Pandoc.Writers
     ) where
 
 import Data.Aeson
+import qualified Data.ByteString.Lazy as BL
 import Data.List (intercalate)
 import Data.Text (Text)
 import Text.Pandoc.Class
 import Text.Pandoc.Definition
 import Text.Pandoc.Options
+import qualified Text.Pandoc.UTF8 as UTF8
 import Text.Pandoc.Writers.AsciiDoc
 import Text.Pandoc.Writers.CommonMark
 import Text.Pandoc.Writers.ConTeXt
@@ -96,8 +99,8 @@ import Text.Pandoc.Writers.Docx
 import Text.Pandoc.Writers.DokuWiki
 import Text.Pandoc.Writers.EPUB
 import Text.Pandoc.Writers.FB2
-import Text.Pandoc.Writers.HTML
 import Text.Pandoc.Writers.Haddock
+import Text.Pandoc.Writers.HTML
 import Text.Pandoc.Writers.ICML
 import Text.Pandoc.Writers.JATS
 import Text.Pandoc.Writers.LaTeX
@@ -108,9 +111,10 @@ import Text.Pandoc.Writers.Ms
 import Text.Pandoc.Writers.Muse
 import Text.Pandoc.Writers.Native
 import Text.Pandoc.Writers.ODT
-import Text.Pandoc.Writers.OPML
 import Text.Pandoc.Writers.OpenDocument
+import Text.Pandoc.Writers.OPML
 import Text.Pandoc.Writers.Org
+import Text.Pandoc.Writers.Powerpoint
 import Text.Pandoc.Writers.RST
 import Text.Pandoc.Writers.RTF
 import Text.Pandoc.Writers.TEI
@@ -118,8 +122,6 @@ import Text.Pandoc.Writers.Texinfo
 import Text.Pandoc.Writers.Textile
 import Text.Pandoc.Writers.ZimWiki
 import Text.Parsec.Error
-import qualified Text.Pandoc.UTF8 as UTF8
-import qualified Data.ByteString.Lazy as BL
 
 data Writer m = TextWriter (WriterOptions -> Pandoc -> m Text)
               | ByteStringWriter (WriterOptions -> Pandoc -> m BL.ByteString)
@@ -131,6 +133,7 @@ writers = [
   ,("json"         , TextWriter $ \o d -> return $ writeJSON o d)
   ,("docx"         , ByteStringWriter writeDocx)
   ,("odt"          , ByteStringWriter writeODT)
+  ,("pptx"         , ByteStringWriter writePowerpoint)
   ,("epub"         , ByteStringWriter writeEPUB3)
   ,("epub2"        , ByteStringWriter writeEPUB2)
   ,("epub3"        , ByteStringWriter writeEPUB3)
@@ -172,6 +175,7 @@ writers = [
   ,("asciidoc"     , TextWriter writeAsciiDoc)
   ,("haddock"      , TextWriter writeHaddock)
   ,("commonmark"   , TextWriter writeCommonMark)
+  ,("gfm"          , TextWriter writeCommonMark)
   ,("tei"          , TextWriter writeTEI)
   ,("muse"         , TextWriter writeMuse)
   ]
